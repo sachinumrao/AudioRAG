@@ -11,10 +11,14 @@ class AudioModel:
         self.batch_size = 1
 
         model_id = "distil-whisper/distil-medium.en"
+        
+        print("Downloading whisper model...")
 
         self.model = AutoModelForSpeechSeq2Seq.from_pretrained(
             model_id, torch_dtype=self.torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
         )
+        
+        print("Model download complete...")
         self.model.to(self.device)
         
         self.model = self.model.to_bettertransformer()
@@ -34,6 +38,7 @@ class AudioModel:
         )
 
     def get_transcript(self, audio_filepath):
+        print(f"Transcribing file: {audio_filepath}")
         result = self.pipe(audio_filepath)
         return result
     
@@ -42,12 +47,13 @@ class AudioModel:
 def main():
     
     audio_directory = "./../audio/"
-    audio_filename = ""
+    audio_filename = "State_of_GPT_|_BRK216HFS.mp3"
     audio_filepath = Path(audio_directory, audio_filename)
     
     model = AudioModel()
-    transcript = model.get_transcript()
-    pass
+    transcript = model.get_transcript(str(audio_filepath))
+    print("Transcript:")
+    print(transcript)
 
 
 if __name__ == "__main__":
