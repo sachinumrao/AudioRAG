@@ -1,22 +1,35 @@
 import os
 import time
+from abc import ABC, abstractmethod
 from pathlib import Path
 
 import torch
-from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
+from transformers import modelcard
 
 DEBUG = os.environ.get("DEBUG", "0")
 
 
-class AudioModel:
-    def __init__(self):
+class ASRModel(ABC):
+    @abstractmethod
+    def get_transcript(self, audio_filepath: str) -> str:
+        pass
+
+
+class HuggingASRModel(ASRModel):
+    """
+    ASR Model using hugginghface ASR pipeline with whisper model.
+    """
+
+    def __init__(self, model_size="tiny"):
+        from transformers import pipeline
+
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         self.torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
         self.batch_size = 1
 
-        model_size = "tiny"
+        self.model_size = model_size
 
-        print("Downloading whisper model...")
+        print(f"Downloading whisper {model_size} model...")
 
         self.pipe = pipeline(
             "automatic-speech-recognition",
@@ -26,117 +39,66 @@ class AudioModel:
         )
         print("Model download complete...")
 
-    def get_transcript(self, audio_filepath):
+    def get_transcript(self, audio_filepath: str) -> str:
+        """Transcribe audio file into english"""
         print(f"Transcribing file: {audio_filepath}")
+        t1 = time.perf_counter()
         result = self.pipe(audio_filepath)
+        t2 = time.perf_counter()
+        print(f"Time Taken in transcription: {t2-t1}s")
         return result["text"]
 
 
+class WhisperASRModel(ASRModel):
+    """
+    ASR Model using the whisper librayr from openai. It uses v1 of the whisper model series.
+    """
+
+    def __init__(self, model_size="tiny"):
+        import whisper
+
+        self.model_size = model_size
+        self.model = whisper.load_model(self.model_size)
+
+        pass
+
+    def get_transcript(self, audio_filepath: str) -> str:
+        """Transcribe audio file into english"""
+
+        print(f"Transcribing file: {audio_filepath}")
+        t1 = time.perf_counter()
+        result = self.model.transcribe(str(audio_filepath))
+
+        t2 = time.perf_counter()
+        print(f"Time Taken in Transcription: {t2-t1}s")
+        return result["text"]
+
+
+def WhisperCPPASRModel(ASRModel):
+    """
+    ASR Model using the whisper-cpp python lib.
+    """
+
+    def __init__(self, model_path: str):
+        from whisper_cpp_python import Whisper
+
+        self.model = Whisper(model_path=model_path)
+
+    def get_transcript(self, audio_filepath: str) -> str:
+        """Transcribe audio file into english"""
+
+        t1 = time.perf_counter()
+        result = self.model.transcribe(open(str(audio_filepath)), language="en")
+        t2 = time.perf_counter()
+        print(f"Time Taken in Transcription: {t2-t1}s")
+
+        return result["text"])
+
+
 def main():
-    audio_directory = "./../audio/"
-    audio_filename = "State_of_GPT_|_BRK216HFS.mp3"
-    audio_filepath = Path(audio_directory, audio_filename)
-
-    t1 = time.perf_counter()
-    model = AudioModel()
-    t2 = time.perf_counter()
-
-    print("Time taken to load the model: ", t2 - t1)
-
-    t3 = time.perf_counter()
-    transcript = model.get_transcript(str(audio_filepath))
-    t4 = time.perf_counter()
-
-    print("Time taken for transcription: ", t4 - t3)
-
-    print("Words in transcript: ", len(transcript.split()))
-
-    # output_path = Path("./../transcripts/", "karpathy_state_of_gpt.txt")
-
-    # with open(output_path, "w+") as f:
-    #    f.writelines(transcript)
+    pass
 
 
-def test_faster_whisper():
-    from faster_whisper import WhisperModel
-
-    audio_directory = "./../audio/"
-    audio_filename = "State_of_GPT_|_BRK216HFS.mp3"
-    audio_filepath = Path(audio_directory, audio_filename)
-    model_size = "tiny.en"  # "large-v3"
-
-    # Run on GPU with FP16
-    # model = WhisperModel(model_size, device="cuda", compute_type="float16")
-
-    # or run on GPU with INT8
-    # model = WhisperModel(model_size, device="cuda", compute_type="int8_float16")
-    # or run on CPU with INT8
-
-    if DEBUG == "1":
-        print("Loading the model...")
-
-    model = WhisperModel(model_size, device="cpu", compute_type="int8")
-
-    segments, info = model.transcribe(str(audio_filepath), beam_size=1)
-
-    print(
-        "Detected language '%s' with probability %f"
-        % (info.language, info.language_probability)
-    )
-
-    if DEBUG == "1":
-        print("Starting Transcription...")
-    for segment in segments:
-        print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
-
-
-def openai_whipser_trnasription():
-    import whisper
-
-    audio_directory = "./../audio/"
-    audio_filename = "State_of_GPT_|_BRK216HFS.mp3"
-    audio_filepath = Path(audio_directory, audio_filename)
-
-    model_type = "base"
-
-    t1 = time.perf_counter()
-    model = whisper.load_model(model_type)
-    t2 = time.perf_counter()
-    print("Time Taken in Loading Model: ", t2 - t1)
-
-    t3 = time.perf_counter()
-    result = model.transcribe(str(audio_filepath))
-    t4 = time.perf_counter()
-    print("Time Taken in Transcription: ", t4 - t3)
-
-    with open(
-        f"./../transcripts/{audio_filename.split('.')[0]}_{model_type}_transcription.txt",
-        "w",
-        encoding="utf-8",
-    ) as txt:
-        txt.write(result["text"])
-
-
-def test_whisper_cpp():
-    from whisper_cpp_python import Whisper
-
-    audio_directory = "./../audio/"
-    audio_filename = "State_of_GPT_|_BRK216HFS.mp3"
-    audio_filepath = Path(audio_directory, audio_filename)
-
-    model_type = "tiny.en"
-
-    t1 = time.perf_counter()
-    model = Whisper(model_path="./models/ggml-tiny.bin")
-    t2 = time.perf_counter()
-    print("Time Taken in Loading Model: ", t2 - t1)
-
-    t3 = time.perf_counter()
-    result = model.transcribe(open(str(audio_filepath)), language="en")
-    t4 = time.perf_counter()
-    print("Time Taken in Transcription: ", t4 - t3)
-
-    print(result["text"])
 
 
 if __name__ == "__main__":
@@ -146,7 +108,4 @@ if __name__ == "__main__":
     main()  # working tiny model takes 260sec
 
 ## TODO:
-# 1. Refactor AudioModel to generic ASRModel class which supports all 4 backends with optional gpu support
-# 2. Build model classes for all backends
-# 3. Fiox bugs in faster whisper inference
-# 4. Fix bugs in whisperc-cpp inference
+# 1. Fix bugs in whisperc-cpp inference
