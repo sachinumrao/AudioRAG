@@ -1,1 +1,4 @@
 pytube==15.0.0
+nltk
+sentence-transformers
+qdrant-client
